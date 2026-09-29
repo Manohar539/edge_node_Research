@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment variables and credentials
+.env
+.env.*
+.aws/
+*.pem
+*.key
+
+# VS Code settings
+.vscode/
+
+# Operating-system files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+worker_id,cpu_capacity_mips,memory_mb,network_mbps,base_latency_ms,energy_capacity,remaining_energy,base_failure_probability,queue_limit,current_queue,status
+edge-worker-01,3838,4096,82,31,88,88,0.107,8,0,available
+edge-worker-02,2072,1024,32,47,81,81,0.051,6,0,available
+edge-worker-03,3477,4096,24,70,97,97,0.065,4,0,available
+edge-worker-04,2289,4096,62,21,92,92,0.183,10,0,available
+edge-worker-05,3624,1024,54,27,94,94,0.148,3,0,available

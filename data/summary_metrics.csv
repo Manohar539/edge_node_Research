@@ -1,0 +1,17 @@
+condition,policy,total_tasks,average_latency_ms,failure_rate_percent,fallback_rate_percent,deadline_miss_rate_percent,total_energy_cost,average_energy_cost
+no_failure,cloud_only,100,250.0,0.0,0.0,0.0,0.0,0.0
+no_failure,latency_only,100,559.86,0.0,0.0,7.0,240.867,2.409
+no_failure,energy_only,100,559.86,0.0,0.0,7.0,240.867,2.409
+no_failure,reliability_aware,100,559.86,0.0,0.0,7.0,240.867,2.409
+low_failure,cloud_only,100,250.0,0.0,0.0,0.0,0.0,0.0
+low_failure,latency_only,100,577.36,5.0,5.0,7.0,240.867,2.409
+low_failure,energy_only,100,577.36,5.0,5.0,7.0,240.867,2.409
+low_failure,reliability_aware,100,577.36,5.0,5.0,7.0,240.867,2.409
+medium_failure,cloud_only,100,250.0,0.0,0.0,0.0,0.0,0.0
+medium_failure,latency_only,100,601.86,12.0,12.0,11.0,240.867,2.409
+medium_failure,energy_only,100,601.86,12.0,12.0,11.0,240.867,2.409
+medium_failure,reliability_aware,100,601.86,12.0,12.0,11.0,240.867,2.409
+high_failure,cloud_only,100,250.0,0.0,0.0,0.0,0.0,0.0
+high_failure,latency_only,100,678.86,34.0,34.0,14.0,240.867,2.409
+high_failure,energy_only,100,678.86,34.0,34.0,14.0,240.867,2.409
+high_failure,reliability_aware,100,678.86,34.0,34.0,14.0,240.867,2.409

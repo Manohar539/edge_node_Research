@@ -1,0 +1,56 @@
+project:
+  name: reliability_aware_edge_cloud
+  random_seed: 42
+
+mqtt:
+  broker: localhost
+  port: 1883
+  keepalive: 60
+
+  topics:
+    tasks: research/tasks
+    results: research/results
+    status: research/workers/status
+
+experiment:
+  number_of_tasks: 100
+  number_of_workers: 5
+  task_interval_seconds: 1
+
+  failure_conditions:
+    no_failure: 0.00
+    low_failure: 0.05
+    medium_failure: 0.15
+    high_failure: 0.30
+
+  policies:
+    - cloud_only
+    - latency_only
+    - energy_only
+    - reliability_aware
+
+controller:
+  minimum_energy: 20
+  maximum_failure_probability: 0.40
+  worker_timeout_seconds: 5
+
+  weights:
+    latency: 0.40
+    reliability: 0.35
+    energy: 0.15
+    queue: 0.10
+
+cloud:
+  provider: aws
+  fallback_service: lambda
+  region: eu-west-1
+  estimated_latency_ms: 250
+  fallback_overhead_ms: 100
+
+output:
+  tasks_file: data/generated_tasks.csv
+  workers_file: data/generated_workers.csv
+  failure_outcomes_file: data/failure_outcomes.csv
+  results_file: data/results.csv
+  comparison_results_file: data/policy_comparison_results.csv
+  summary_file: data/summary_metrics.csv
