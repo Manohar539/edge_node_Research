@@ -1,0 +1,11 @@
+paho-mqtt
+PyYAML
+boto3
+psutil
+pandas
+numpy
+scipy
+matplotlib
+seaborn
+pytest
+python-dotenv
