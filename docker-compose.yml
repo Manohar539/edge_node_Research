@@ -16,7 +16,7 @@ services:
     container_name: research-worker-1
     environment:
       INJECTED_FAILURE_RATE: ${FAILURE_RATE:-0.0}
-      RANDOM_SEED: 42
+      RANDOM_SEED: ${RUN_SEED:-42}
       ENERGY_COST_PER_MILLION: 1.0
       MEMORY_CAPACITY_MB: 256
       WORKER_ID: worker-1
@@ -38,7 +38,7 @@ services:
     container_name: research-worker-2
     environment:
       INJECTED_FAILURE_RATE: ${FAILURE_RATE:-0.0}
-      RANDOM_SEED: 42
+      RANDOM_SEED: ${RUN_SEED:-42}
       ENERGY_COST_PER_MILLION: 1.5
       MEMORY_CAPACITY_MB: 384
       WORKER_ID: worker-2
@@ -60,7 +60,7 @@ services:
     container_name: research-worker-3
     environment:
       INJECTED_FAILURE_RATE: ${FAILURE_RATE:-0.0}
-      RANDOM_SEED: 42
+      RANDOM_SEED: ${RUN_SEED:-42}
       ENERGY_COST_PER_MILLION: 2.0
       MEMORY_CAPACITY_MB: 512
       WORKER_ID: worker-3

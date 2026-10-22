@@ -122,7 +122,42 @@ TASKS_BY_ID = {
 }
 
 config = load_config()
+WEIGHT_SETTINGS = {
+    "default": {
+        "latency": 0.40,
+        "reliability": 0.35,
+        "energy": 0.15,
+        "queue": 0.10,
+    },
+    "latency_priority": {
+        "latency": 0.60,
+        "reliability": 0.20,
+        "energy": 0.10,
+        "queue": 0.10,
+    },
+    "reliability_priority": {
+        "latency": 0.20,
+        "reliability": 0.60,
+        "energy": 0.10,
+        "queue": 0.10,
+    },
+    "energy_priority": {
+        "latency": 0.20,
+        "reliability": 0.20,
+        "energy": 0.50,
+        "queue": 0.10,
+    },
+}
 
+if WEIGHT_SETTING not in WEIGHT_SETTINGS:
+    raise ValueError(
+        f"Unknown WEIGHT_SETTING: {WEIGHT_SETTING}. "
+        f"Choose from {list(WEIGHT_SETTINGS)}"
+    )
+
+config["controller"]["weights"] = WEIGHT_SETTINGS[
+    WEIGHT_SETTING
+]
 worker_profiles = {}
 dispatch_times = {}
 decisions = {}
