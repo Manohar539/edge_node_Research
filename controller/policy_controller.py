@@ -1,11 +1,11 @@
 import csv
 import json
-import os
-import threading
 import time
 import boto3
 from pathlib import Path
-
+import os
+import random
+import threading
 import paho.mqtt.client as mqtt
 
 from controller.policies import apply_policy
@@ -14,7 +14,19 @@ from shared.config_loader import load_config
 
 MQTT_HOST = os.getenv("MQTT_HOST", "mqtt")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
-POLICY_NAME = os.getenv("POLICY_NAME", "reliability_aware")
+POLICY_NAME = os.getenv(
+    "POLICY_NAME",
+    "reliability_aware",
+)
+NUMBER_OF_TASKS = int(os.getenv("NUMBER_OF_TASKS", "100"))
+RUN_SEED = int(os.getenv("RUN_SEED", "42"))
+RUN_ID = os.getenv("RUN_ID", "run-001")
+REPETITION = int(os.getenv("REPETITION", "1"))
+FAILURE_RATE = float(os.getenv("FAILURE_RATE", "0.0"))
+WEIGHT_SETTING = os.getenv("WEIGHT_SETTING", "default")
+TASK_INTERVAL_SECONDS = float(
+    os.getenv("TASK_INTERVAL_SECONDS", "0.05")
+)
 AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "eu-west-1")
 LAMBDA_FUNCTION = os.getenv(
     "AWS_LAMBDA_FUNCTION",
@@ -31,32 +43,83 @@ OUTPUT_FILE = Path(
     )
 )
 
-TASKS = [
-    {
-        "task_id": "policy-task-001",
-        "iterations": 1_000_000,
-        "cpu_cycles_million": 100,
-        "input_size_kb": 256,
-        "deadline_ms": 200,
-        "memory_required_mb": 128,
-    },
-    {
-        "task_id": "policy-task-002",
-        "iterations": 1_500_000,
-        "cpu_cycles_million": 180,
-        "input_size_kb": 512,
-        "deadline_ms": 250,
-        "memory_required_mb": 256,
-    },
-    {
-        "task_id": "policy-task-003",
-        "iterations": 2_000_000,
-        "cpu_cycles_million": 300,
-        "input_size_kb": 1024,
-        "deadline_ms": 350,
-        "memory_required_mb": 300,
-    },
-]
+def generate_tasks(number_of_tasks, run_seed, run_id):
+    """Create reproducible workload definitions for real execution."""
+
+    random_generator = random.Random(run_seed)
+
+    workload_profiles = [
+        {
+            "name": "small",
+            "iterations": (750_000, 1_250_000),
+            "cpu_cycles_million": (80, 120),
+            "input_size_kb": (128, 384),
+            "deadline_ms": (180, 240),
+            "memory_required_mb": (96, 160),
+        },
+        {
+            "name": "medium",
+            "iterations": (1_250_000, 1_750_000),
+            "cpu_cycles_million": (140, 220),
+            "input_size_kb": (384, 768),
+            "deadline_ms": (230, 320),
+            "memory_required_mb": (192, 300),
+        },
+        {
+            "name": "large",
+            "iterations": (1_750_000, 2_500_000),
+            "cpu_cycles_million": (240, 360),
+            "input_size_kb": (768, 1536),
+            "deadline_ms": (300, 450),
+            "memory_required_mb": (300, 480),
+        },
+    ]
+
+
+    tasks = []
+
+    for task_number in range(1, number_of_tasks + 1):
+        profile = workload_profiles[
+            (task_number - 1) % len(workload_profiles)
+        ]
+
+        tasks.append(
+            {
+                "task_id": (
+                    f"{run_id}-task-{task_number:03d}"
+                ),
+                "task_sequence": task_number,
+                "workload_profile": profile["name"],
+                "iterations": random_generator.randint(
+                    *profile["iterations"]
+                ),
+                "cpu_cycles_million": random_generator.randint(
+                    *profile["cpu_cycles_million"]
+                ),
+                "input_size_kb": random_generator.randint(
+                    *profile["input_size_kb"]
+                ),
+                "deadline_ms": random_generator.randint(
+                    *profile["deadline_ms"]
+                ),
+                "memory_required_mb": random_generator.randint(
+                    *profile["memory_required_mb"]
+                ),
+            }
+        )
+
+    return tasks
+
+
+TASKS = generate_tasks(
+    NUMBER_OF_TASKS,
+    RUN_SEED,
+    RUN_ID,
+)
+TASKS_BY_ID = {
+    task["task_id"]: task
+    for task in TASKS
+}
 
 config = load_config()
 
@@ -72,13 +135,79 @@ worker_lock = threading.Lock()
 def save_result(result):
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     file_exists = OUTPUT_FILE.exists()
+    task = TASKS_BY_ID.get(result["task_id"], {})
 
+    result = {
+        "run_id": RUN_ID,
+        "run_seed": RUN_SEED,
+        "repetition": REPETITION,
+        "configured_failure_rate": FAILURE_RATE,
+        "weight_setting": WEIGHT_SETTING,
+        "task_sequence": task.get("task_sequence", ""),
+        "workload_profile": task.get("workload_profile", ""),
+        "deadline_ms": task.get("deadline_ms", ""),
+        "memory_required_mb": task.get(
+            "memory_required_mb",
+            "",
+        ),
+        **result,
+    }
+    deadline_ms = task.get("deadline_ms", "")
+    end_to_end_latency_ms = result.get(
+        "end_to_end_latency_ms",
+        "",
+    )
+
+    deadline_missed = False
+
+    if deadline_ms != "" and end_to_end_latency_ms != "":
+        deadline_missed = (
+            float(end_to_end_latency_ms)
+            > float(deadline_ms)
+        )
+
+    cloud_used = (
+        result.get("destination") == "aws_lambda"
+    )
+
+    fallback_used = (
+        cloud_used and POLICY_NAME != "cloud_only"
+    )
+
+    service_disrupted = (
+        result.get("status") != "completed"
+        or deadline_missed
+    )
+
+    result.update(
+        {
+            "deadline_missed": int(deadline_missed),
+            "cloud_used": int(cloud_used),
+            "fallback_used": int(fallback_used),
+            "service_disrupted": int(
+                service_disrupted
+            ),
+        }
+    )
     fields = [
+        "run_id",
+        "run_seed",
+        "repetition",
+        "configured_failure_rate",
+        "weight_setting",
+        "task_sequence",
+        "workload_profile",
+        "deadline_ms",
+        "memory_required_mb",
         "task_id",
         "policy",
         "destination",
         "worker_id",
         "status",
+        "deadline_missed",
+        "cloud_used",
+        "fallback_used",
+        "service_disrupted",
         "iterations",
         "predicted_latency_ms",
         "worker_execution_time_ms",
@@ -384,7 +513,7 @@ def dispatch_task(client, task):
             ],
         )
 
-    time.sleep(1)
+    time.sleep(TASK_INTERVAL_SECONDS)
 
 
 def main():
