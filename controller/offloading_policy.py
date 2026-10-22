@@ -36,7 +36,18 @@ def calculate_latency(task, worker):
 
 
 def calculate_energy_cost(task, worker):
-    """Estimate the software-defined energy cost."""
+    """Estimate software-modelled energy units."""
+
+    if "iterations" in task:
+        energy_rate = float(
+            worker.get("energy_cost_per_million", 2.0)
+        )
+
+        return round(
+            (float(task["iterations"]) / 1_000_000)
+            * energy_rate,
+            3,
+        )
 
     cpu_ratio = (
         float(task["cpu_cycles_million"])
@@ -72,7 +83,7 @@ def select_worker(task, workers, config):
             continue
 
         failure_probability = float(
-            worker["base_failure_probability"]
+            worker["estimated_failure_probability"]
         )
 
         if failure_probability > maximum_failure:

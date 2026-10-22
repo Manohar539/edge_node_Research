@@ -53,7 +53,7 @@ def latency_only_policy(task, workers, config):
             2,
         ),
         "failure_probability": float(
-            worker["base_failure_probability"]
+            worker["estimated_failure_probability"]
         ),
         "energy_cost": calculate_energy_cost(task, worker),
         "reason": "Lowest predicted latency",
@@ -85,7 +85,7 @@ def energy_only_policy(task, workers, config):
             2,
         ),
         "failure_probability": float(
-            worker["base_failure_probability"]
+            worker["estimated_failure_probability"]
         ),
         "energy_cost": calculate_energy_cost(task, worker),
         "reason": "Lowest predicted energy cost",

@@ -1,0 +1,102 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: research-mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
+  worker-1:
+    build:
+      context: ./workers
+    container_name: research-worker-1
+    environment:
+      INJECTED_FAILURE_RATE: ${FAILURE_RATE:-0.0}
+      RANDOM_SEED: 42
+      ENERGY_COST_PER_MILLION: 1.0
+      MEMORY_CAPACITY_MB: 256
+      WORKER_ID: worker-1
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      CPU_CAPACITY_MIPS: 1500
+      NETWORK_MBPS: 50
+      BASE_LATENCY_MS: 20
+      QUEUE_LIMIT: 5
+    cpus: "0.50"
+    mem_limit: 256m
+    depends_on:
+      - mqtt
+    restart: unless-stopped
+
+  worker-2:
+    build:
+      context: ./workers
+    container_name: research-worker-2
+    environment:
+      INJECTED_FAILURE_RATE: ${FAILURE_RATE:-0.0}
+      RANDOM_SEED: 42
+      ENERGY_COST_PER_MILLION: 1.5
+      MEMORY_CAPACITY_MB: 384
+      WORKER_ID: worker-2
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      CPU_CAPACITY_MIPS: 2500
+      NETWORK_MBPS: 100
+      BASE_LATENCY_MS: 12
+      QUEUE_LIMIT: 8
+    cpus: "0.75"
+    mem_limit: 384m
+    depends_on:
+      - mqtt
+    restart: unless-stopped
+
+  worker-3:
+    build:
+      context: ./workers
+    container_name: research-worker-3
+    environment:
+      INJECTED_FAILURE_RATE: ${FAILURE_RATE:-0.0}
+      RANDOM_SEED: 42
+      ENERGY_COST_PER_MILLION: 2.0
+      MEMORY_CAPACITY_MB: 512
+      WORKER_ID: worker-3
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      CPU_CAPACITY_MIPS: 3500
+      NETWORK_MBPS: 200
+      BASE_LATENCY_MS: 8
+      QUEUE_LIMIT: 10
+    cpus: "1.00"
+    mem_limit: 512m
+    depends_on:
+      - mqtt
+    restart: unless-stopped
+
+  controller:
+    build:
+      context: .
+      dockerfile: controller/Dockerfile
+
+    container_name: research-controller
+    environment:
+      AWS_DEFAULT_REGION: eu-west-1
+      AWS_PROFILE: default
+      AWS_LAMBDA_FUNCTION: edge-cloud-fallback
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      CONTROLLER_RESULTS_FILE: /app/data/controller_results.csv
+    volumes:
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+      - ./data:/app/data
+    depends_on:
+      - mqtt
+      - worker-1
+      - worker-2
+      - worker-3
+    profiles:
+      - controller
+    restart: "no"
