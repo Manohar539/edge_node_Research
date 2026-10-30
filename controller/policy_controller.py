@@ -201,13 +201,25 @@ def save_result(result):
             > float(deadline_ms)
         )
 
-    cloud_used = (
+        cloud_used = (
         result.get("destination") == "aws_lambda"
     )
 
-    fallback_used = (
-        cloud_used and POLICY_NAME != "cloud_only"
+    cloud_offload_type = result.get(
+        "cloud_offload_type",
+        "none",
     )
+    cloud_reason = result.get("cloud_reason", "")
+
+    direct_cloud_used = (
+        cloud_offload_type == "direct_cloud"
+    )
+
+    timeout_fallback_used = (
+        cloud_offload_type == "timeout_fallback"
+    )
+
+    edge_timeout_occurred = timeout_fallback_used
 
     service_disrupted = (
         result.get("status") != "completed"
@@ -218,7 +230,20 @@ def save_result(result):
         {
             "deadline_missed": int(deadline_missed),
             "cloud_used": int(cloud_used),
-            "fallback_used": int(fallback_used),
+            "cloud_offload_type": cloud_offload_type,
+            "cloud_reason": cloud_reason,
+            "direct_cloud_used": int(
+                direct_cloud_used
+            ),
+            "timeout_fallback_used": int(
+                timeout_fallback_used
+            ),
+            "edge_timeout_occurred": int(
+                edge_timeout_occurred
+            ),
+            "fallback_used": int(
+                timeout_fallback_used
+            ),
             "service_disrupted": int(
                 service_disrupted
             ),
@@ -241,6 +266,11 @@ def save_result(result):
         "status",
         "deadline_missed",
         "cloud_used",
+        "cloud_offload_type",
+        "cloud_reason",
+        "direct_cloud_used",
+        "timeout_fallback_used",
+        "edge_timeout_occurred",
         "fallback_used",
         "service_disrupted",
         "iterations",
@@ -440,11 +470,20 @@ def invoke_cloud_fallback(task,decision,original_start_time=None,):
     end_to_end_latency_ms = (
         time.perf_counter() - start_time
     ) * 1000
+    if original_start_time is not None:
+        cloud_offload_type = "timeout_fallback"
+    elif POLICY_NAME == "cloud_only":
+        cloud_offload_type = "policy_cloud"
+    else:
+        cloud_offload_type = "direct_cloud"
 
+    cloud_reason = decision.get("reason", "")
     result = {
         "task_id": task["task_id"],
         "policy": POLICY_NAME,
         "destination": "aws_lambda",
+        "cloud_offload_type": cloud_offload_type,
+        "cloud_reason": cloud_reason,
         "worker_id": "aws_lambda",
         "status": lambda_result["status"],
         "iterations": lambda_result["iterations"],

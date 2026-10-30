@@ -12,6 +12,8 @@ SUMMARY_FIELDS = [
     "configured_failure_rate",
     "weight_setting",
     "policy",
+    "analysis_scope",
+    "warmup_tasks_excluded",
     "tasks_total",
     "tasks_completed",
     "service_disruptions",
@@ -20,6 +22,12 @@ SUMMARY_FIELDS = [
     "deadline_miss_rate",
     "cloud_executions",
     "cloud_execution_rate",
+    "direct_cloud_offloads",
+    "direct_cloud_offload_rate",
+    "timeout_fallbacks",
+    "timeout_fallback_rate",
+    "edge_timeouts",
+    "edge_timeout_rate",
     "fallbacks",
     "fallback_rate",
     "mean_end_to_end_latency_ms",
@@ -69,7 +77,13 @@ def group_results(rows):
     return grouped
 
 
-def summarise_run(key, rows):
+
+def summarise_run(
+    key,
+    rows,
+    analysis_scope,
+    warmup_tasks_excluded,
+):
     """Calculate one run-level summary."""
 
     (
@@ -89,22 +103,37 @@ def summarise_run(key, rows):
     )
 
     disruptions = sum(
-        int(number(row["service_disrupted"]))
+        int(number(row.get("service_disrupted")))
         for row in rows
     )
 
     deadline_misses = sum(
-        int(number(row["deadline_missed"]))
+        int(number(row.get("deadline_missed")))
         for row in rows
     )
 
     cloud_executions = sum(
-        int(number(row["cloud_used"]))
+        int(number(row.get("cloud_used")))
+        for row in rows
+    )
+
+    direct_cloud_offloads = sum(
+        int(number(row.get("direct_cloud_used")))
+        for row in rows
+    )
+
+    timeout_fallbacks = sum(
+        int(number(row.get("timeout_fallback_used")))
+        for row in rows
+    )
+
+    edge_timeouts = sum(
+        int(number(row.get("edge_timeout_occurred")))
         for row in rows
     )
 
     fallbacks = sum(
-        int(number(row["fallback_used"]))
+        int(number(row.get("fallback_used")))
         for row in rows
     )
 
@@ -133,6 +162,8 @@ def summarise_run(key, rows):
         "configured_failure_rate": failure_rate,
         "weight_setting": weight_setting,
         "policy": policy,
+        "analysis_scope": analysis_scope,
+        "warmup_tasks_excluded": warmup_tasks_excluded,
         "tasks_total": tasks_total,
         "tasks_completed": tasks_completed,
         "service_disruptions": disruptions,
@@ -148,6 +179,21 @@ def summarise_run(key, rows):
         "cloud_executions": cloud_executions,
         "cloud_execution_rate": round(
             cloud_executions / tasks_total,
+            4,
+        ),
+        "direct_cloud_offloads": direct_cloud_offloads,
+        "direct_cloud_offload_rate": round(
+            direct_cloud_offloads / tasks_total,
+            4,
+        ),
+        "timeout_fallbacks": timeout_fallbacks,
+        "timeout_fallback_rate": round(
+            timeout_fallbacks / tasks_total,
+            4,
+        ),
+        "edge_timeouts": edge_timeouts,
+        "edge_timeout_rate": round(
+            edge_timeouts / tasks_total,
             4,
         ),
         "fallbacks": fallbacks,
@@ -172,7 +218,6 @@ def summarise_run(key, rows):
             3,
         ),
     }
-
 
 def write_summaries(output_file, summaries):
     """Write run summaries to CSV."""
@@ -222,10 +267,31 @@ def main():
 
     grouped = group_results(rows)
 
-    summaries = [
-        summarise_run(key, run_rows)
-        for key, run_rows in grouped.items()
-    ]
+    summaries = []
+
+    for key, run_rows in grouped.items():
+        primary_summary = summarise_run(
+            key,
+            run_rows,
+            analysis_scope="primary_all_tasks",
+            warmup_tasks_excluded=0,
+        )
+        summaries.append(primary_summary)
+
+        post_warmup_rows = [
+            row
+            for row in run_rows
+            if int(row["task_sequence"]) > 20
+        ]
+
+        if post_warmup_rows:
+            post_warmup_summary = summarise_run(
+                key,
+                post_warmup_rows,
+                analysis_scope="secondary_post_warmup",
+                warmup_tasks_excluded=20,
+            )
+            summaries.append(post_warmup_summary)
 
     write_summaries(
         arguments.output,

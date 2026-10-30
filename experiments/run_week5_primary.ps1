@@ -214,7 +214,73 @@ for (
                     "Controller experiment failed for $runId"
                 )
             }
+            $runRows = @(
+                Import-Csv $outputFile |
+                    Where-Object {
+                        $_.run_id -eq $runId
+                    }
+            )
 
+            if ($runRows.Count -ne 100) {
+                throw (
+                    "Run $runId produced " +
+                    "$($runRows.Count) rows; expected 100."
+                )
+            }
+
+            $uniqueTaskIds = @(
+                $runRows.task_id |
+                    Sort-Object -Unique
+            )
+
+            if ($uniqueTaskIds.Count -ne 100) {
+                throw (
+                    "Run $runId does not contain " +
+                    "100 unique task IDs."
+                )
+            }
+
+            $incompleteRows = @(
+                $runRows |
+                    Where-Object {
+                        $_.status -ne "completed"
+                    }
+            )
+
+            if ($incompleteRows.Count -ne 0) {
+                throw (
+                    "Run $runId contains " +
+                    "$($incompleteRows.Count) " +
+                    "incomplete task rows."
+                )
+            }
+
+            $validCloudTypes = @(
+                "none",
+                "policy_cloud",
+                "direct_cloud",
+                "timeout_fallback"
+            )
+
+            $invalidCloudRows = @(
+                $runRows |
+                    Where-Object {
+                        $_.cloud_offload_type `
+                            -notin $validCloudTypes
+                    }
+            )
+
+            if ($invalidCloudRows.Count -ne 0) {
+                throw (
+                    "Run $runId contains invalid " +
+                    "cloud-offload classifications."
+                )
+            }
+
+            Write-Host (
+                "Validated 100 completed task rows " +
+                "for $runId"
+            )
             Add-Content `
                 -Path $checkpointFile `
                 -Value $runId
@@ -241,7 +307,77 @@ $taskRows = @(
 $summaryRows = @(
     Import-Csv $summaryFile
 )
+$uniqueRunIds = @(
+    $taskRows.run_id |
+        Sort-Object -Unique
+)
 
+$expectedSummaryRows = $uniqueRunIds.Count * 2
+
+if ($summaryRows.Count -ne $expectedSummaryRows) {
+    throw (
+        "Found $($summaryRows.Count) summary rows; " +
+        "expected $expectedSummaryRows."
+    )
+}
+
+foreach ($completedRunId in $uniqueRunIds) {
+    $runSummaries = @(
+        $summaryRows |
+            Where-Object {
+                $_.run_id -eq $completedRunId
+            }
+    )
+
+    if ($runSummaries.Count -ne 2) {
+        throw (
+            "$completedRunId has " +
+            "$($runSummaries.Count) summaries; " +
+            "expected 2."
+        )
+    }
+
+    $primarySummary = @(
+        $runSummaries |
+            Where-Object {
+                $_.analysis_scope -eq `
+                    "primary_all_tasks"
+            }
+    )
+
+    if (
+        $primarySummary.Count -ne 1 -or
+        [int]$primarySummary[0].tasks_total -ne 100
+    ) {
+        throw (
+            "$completedRunId has an invalid " +
+            "primary summary."
+        )
+    }
+
+    $postWarmupSummary = @(
+        $runSummaries |
+            Where-Object {
+                $_.analysis_scope -eq `
+                    "secondary_post_warmup"
+            }
+    )
+
+    if (
+        $postWarmupSummary.Count -ne 1 -or
+        [int]$postWarmupSummary[0].tasks_total -ne 80
+    ) {
+        throw (
+            "$completedRunId has an invalid " +
+            "post-warm-up summary."
+        )
+    }
+}
+
+Write-Host (
+    "Validated $($uniqueRunIds.Count) runs and " +
+    "$($summaryRows.Count) summary rows."
+)
 Write-Host ""
 Write-Host "Week 5 primary experiment completed."
 Write-Host "Task rows: $($taskRows.Count)"

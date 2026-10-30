@@ -41,3 +41,5 @@ data/reliability_aware_results.csv
 data/fallback_recovery_test.csv
 data/*pilot*.csv
 data/week4_all_policies_summary.csv
+# Pre-freeze experimental validation data
+data/pre_freeze_archive/
