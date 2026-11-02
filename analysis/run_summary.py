@@ -52,7 +52,7 @@ def load_results(input_file):
     with input_file.open(
         "r",
         newline="",
-        encoding="utf-8",
+        encoding="utf-8-sig",
     ) as file:
         return list(csv.DictReader(file))
 
