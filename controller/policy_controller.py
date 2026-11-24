@@ -171,6 +171,10 @@ def save_result(result):
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     file_exists = OUTPUT_FILE.exists()
     task = TASKS_BY_ID.get(result["task_id"], {})
+    decision = decisions.get(
+        result["task_id"],
+        {},
+    )
 
     result = {
         "run_id": RUN_ID,
@@ -183,6 +187,30 @@ def save_result(result):
         "deadline_ms": task.get("deadline_ms", ""),
         "memory_required_mb": task.get(
             "memory_required_mb",
+            "",
+        ),
+        "workers_considered": decision.get(
+            "workers_considered",
+            "",
+        ),
+        "excluded_unavailable": decision.get(
+            "excluded_unavailable",
+            "",
+        ),
+        "excluded_memory": decision.get(
+            "excluded_memory",
+            "",
+        ),
+        "excluded_failure_ceiling": decision.get(
+            "excluded_failure_ceiling",
+            "",
+        ),
+        "excluded_energy_floor": decision.get(
+            "excluded_energy_floor",
+            "",
+        ),
+        "eligible_worker_count": decision.get(
+            "eligible_worker_count",
             "",
         ),
         **result,
@@ -273,6 +301,12 @@ def save_result(result):
         "edge_timeout_occurred",
         "fallback_used",
         "service_disrupted",
+        "workers_considered",
+        "excluded_unavailable",
+        "excluded_memory",
+        "excluded_failure_ceiling",
+        "excluded_energy_floor",
+        "eligible_worker_count",
         "iterations",
         "predicted_latency_ms",
         "worker_execution_time_ms",

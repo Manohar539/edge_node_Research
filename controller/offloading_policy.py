@@ -26,13 +26,20 @@ def calculate_latency(task, worker):
     network_mbps = float(worker["network_mbps"])
     base_latency = float(worker["base_latency_ms"])
 
-    execution_time_ms = (cpu_cycles / cpu_capacity) * 1000
-
-    transfer_time_ms = (
-        (input_size_kb * 8) / (network_mbps * 1000)
+    execution_time_ms = (
+        cpu_cycles / cpu_capacity
     ) * 1000
 
-    return base_latency + execution_time_ms + transfer_time_ms
+    transfer_time_ms = (
+        (input_size_kb * 8)
+        / (network_mbps * 1000)
+    ) * 1000
+
+    return (
+        base_latency
+        + execution_time_ms
+        + transfer_time_ms
+    )
 
 
 def calculate_energy_cost(task, worker):
@@ -40,11 +47,17 @@ def calculate_energy_cost(task, worker):
 
     if "iterations" in task:
         energy_rate = float(
-            worker.get("energy_cost_per_million", 2.0)
+            worker.get(
+                "energy_cost_per_million",
+                2.0,
+            )
         )
 
         return round(
-            (float(task["iterations"]) / 1_000_000)
+            (
+                float(task["iterations"])
+                / 1_000_000
+            )
             * energy_rate,
             3,
         )
@@ -54,9 +67,16 @@ def calculate_energy_cost(task, worker):
         / float(worker["cpu_capacity_mips"])
     )
 
-    data_ratio = float(task["input_size_kb"]) / 5000
+    data_ratio = (
+        float(task["input_size_kb"])
+        / 5000
+    )
 
-    return round((cpu_ratio * 5) + (data_ratio * 2), 3)
+    return round(
+        (cpu_ratio * 5)
+        + (data_ratio * 2),
+        3,
+    )
 
 
 def select_worker(task, workers, config):
@@ -65,38 +85,72 @@ def select_worker(task, workers, config):
     controller_config = config["controller"]
     weights = controller_config["weights"]
 
-    minimum_energy = controller_config["minimum_energy"]
+    minimum_energy = controller_config[
+        "minimum_energy"
+    ]
+
     maximum_failure = controller_config[
         "maximum_failure_probability"
     ]
 
-    deadline_ms = float(task["deadline_ms"])
-    required_memory = float(task["memory_required_mb"])
+    deadline_ms = float(
+        task["deadline_ms"]
+    )
+
+    required_memory = float(
+        task["memory_required_mb"]
+    )
 
     candidates = []
 
+    workers_considered = len(workers)
+    excluded_unavailable = 0
+    excluded_memory = 0
+    excluded_failure_ceiling = 0
+    excluded_energy_floor = 0
+
     for worker in workers:
         if worker["status"] != "available":
+            excluded_unavailable += 1
             continue
 
-        if float(worker["memory_mb"]) < required_memory:
+        if (
+            float(worker["memory_mb"])
+            < required_memory
+        ):
+            excluded_memory += 1
             continue
 
         failure_probability = float(
-            worker["estimated_failure_probability"]
+            worker[
+                "estimated_failure_probability"
+            ]
         )
 
-        if failure_probability > maximum_failure:
+        if (
+            failure_probability
+            > maximum_failure
+        ):
+            excluded_failure_ceiling += 1
             continue
 
-        predicted_latency = calculate_latency(task, worker)
-        energy_cost = calculate_energy_cost(task, worker)
+        predicted_latency = calculate_latency(
+            task,
+            worker,
+        )
+
+        energy_cost = calculate_energy_cost(
+            task,
+            worker,
+        )
 
         remaining_energy = (
-            float(worker["remaining_energy"]) - energy_cost
+            float(worker["remaining_energy"])
+            - energy_cost
         )
 
         if remaining_energy < minimum_energy:
+            excluded_energy_floor += 1
             continue
 
         queue_utilisation = (
@@ -104,45 +158,88 @@ def select_worker(task, workers, config):
             / float(worker["queue_limit"])
         )
 
-        latency_score = predicted_latency / deadline_ms
-        energy_score = energy_cost / 100
+        latency_score = (
+            predicted_latency
+            / deadline_ms
+        )
+
+        energy_score = (
+            energy_cost
+            / 100
+        )
 
         total_score = (
-            weights["latency"] * latency_score
-            + weights["reliability"] * failure_probability
-            + weights["energy"] * energy_score
-            + weights["queue"] * queue_utilisation
+            weights["latency"]
+            * latency_score
+            + weights["reliability"]
+            * failure_probability
+            + weights["energy"]
+            * energy_score
+            + weights["queue"]
+            * queue_utilisation
         )
 
         candidates.append(
             {
-                "worker_id": worker["worker_id"],
+                "worker_id": worker[
+                    "worker_id"
+                ],
                 "predicted_latency_ms": round(
                     predicted_latency,
                     2,
                 ),
-                "failure_probability": failure_probability,
+                "failure_probability": (
+                    failure_probability
+                ),
                 "energy_cost": energy_cost,
                 "remaining_energy": round(
                     remaining_energy,
                     2,
                 ),
-                "score": round(total_score, 4),
+                "score": round(
+                    total_score,
+                    4,
+                ),
             }
         )
+
+    # This block must remain outside the
+    # for-worker loop.
+    filter_diagnostics = {
+        "workers_considered": workers_considered,
+        "excluded_unavailable": excluded_unavailable,
+        "excluded_memory": excluded_memory,
+        "excluded_failure_ceiling": (
+            excluded_failure_ceiling
+        ),
+        "excluded_energy_floor": (
+            excluded_energy_floor
+        ),
+        "eligible_worker_count": len(candidates),
+    }
 
     if not candidates:
         return {
             "destination": "aws_lambda",
-            "reason": "No eligible edge worker",
+            "reason": (
+                "No eligible edge worker"
+            ),
+            **filter_diagnostics,
         }
 
     best_worker = min(
         candidates,
-        key=lambda candidate: candidate["score"],
+        key=lambda candidate: (
+            candidate["score"]
+        ),
     )
 
     best_worker["destination"] = "edge"
+
+    best_worker.update(
+        filter_diagnostics
+    )
+
     return best_worker
 
 
@@ -150,19 +247,36 @@ def main():
     config = load_config()
 
     tasks_file = (
-        PROJECT_ROOT / config["output"]["tasks_file"]
+        PROJECT_ROOT
+        / config["output"]["tasks_file"]
     )
+
     workers_file = (
-        PROJECT_ROOT / config["output"]["workers_file"]
+        PROJECT_ROOT
+        / config["output"]["workers_file"]
     )
 
-    task = load_first_task(tasks_file)
-    workers = load_workers(workers_file)
+    task = load_first_task(
+        tasks_file
+    )
 
-    decision = select_worker(task, workers, config)
+    workers = load_workers(
+        workers_file
+    )
 
-    print(f"Task: {task['task_id']}")
-    print(f"Decision: {decision}")
+    decision = select_worker(
+        task,
+        workers,
+        config,
+    )
+
+    print(
+        f"Task: {task['task_id']}"
+    )
+
+    print(
+        f"Decision: {decision}"
+    )
 
 
 if __name__ == "__main__":
